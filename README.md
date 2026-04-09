@@ -19,13 +19,6 @@ All three are trained and evaluated on the **Indiana University Chest X-Ray data
 - **Linguistic metrics:** BLEU-1/2/3/4, METEOR, CIDEr (via `pycocoevalcap`)
 - **Clinical metrics:** CheXbert F1 over 14 findings (measures whether the generated report mentions the right pathologies, not just fluent-sounding text)
 
-## Team & roles
-
-| Person | Responsibility |
-|--------|----------------|
-| **A** | Data pipeline + Hierarchical LSTM baseline |
-| **B** | Vanilla Transformer + shared training infrastructure (trainer loop, config system) |
-| **C** | Clinical-term-guided Transformer + evaluation pipeline (BLEU/METEOR/CIDEr + CheXbert) |
 
 ## Repository structure
 dl-cxr-report-gen/
