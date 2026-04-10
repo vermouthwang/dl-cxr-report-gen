@@ -21,7 +21,7 @@ All three are trained and evaluated on the **Indiana University Chest X-Ray data
 
 
 ## Repository structure
-
+```text
 dl-cxr-report-gen/
 ├── src/             # Model code, data loaders, training utilities
 ├── configs/         # YAML configs for experiments (one per run)
@@ -31,7 +31,7 @@ dl-cxr-report-gen/
 ├── README.md
 ├── requirements.txt
 └── .gitignore
-
+```
 
 ## Getting started
 
@@ -112,21 +112,7 @@ Tag runs with the model family (`lstm`, `transformer`, `clinical-tf`) so the W&B
 
 To let all three models share the same training script and data loader, we've locked down the model and batch interfaces on Day 1. See [`docs/interfaces.md`](docs/interfaces.md) for the spec. **Do not deviate without team agreement** — breaking the interface breaks everyone's code.
 
-## Communication
 
-- **Daily / async:** Discord (channel: `#dl-project`)
-- **Weekly sync:** Fridays, 4pm ET (video call)
-- **Task tracking:** GitHub Issues (one issue per task, assigned to a person, tagged by week)
-- **Experiment results:** shared W&B dashboard
-
-## Timeline (rough)
-
-| Week | Milestone |
-|------|-----------|
-| 1 | Environment setup, data pipeline, LSTM baseline skeleton |
-| 2 | All 3 models trainable end-to-end; first full training runs |
-| 3 | Hyperparameter tuning, final runs (burst to GCP if needed), evaluation |
-| 4 | Ablations, report writing, final presentation |
 
 ## Acknowledgements
 
