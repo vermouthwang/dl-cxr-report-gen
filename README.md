@@ -21,6 +21,7 @@ All three are trained and evaluated on the **Indiana University Chest X-Ray data
 
 
 ## Repository structure
+
 dl-cxr-report-gen/
 ├── src/             # Model code, data loaders, training utilities
 ├── configs/         # YAML configs for experiments (one per run)
