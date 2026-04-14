@@ -2,6 +2,10 @@
 """
 This is a script for inspecting and verifying the R2Gen-preprocessed IU X-Ray dataset.
 You should expect printed all the checks to pass.
+  ✅ train: 2069 studies
+  ✅ val: 296 studies
+  ✅ test: 590 studies
+  ✅ total: 2955 studies
 Verifies:
   1. annotation.json exists, parses, and has the expected top-level structure
   2. Train/val/test split sizes match the canonical R2Gen split
