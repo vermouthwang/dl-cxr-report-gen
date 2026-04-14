@@ -113,3 +113,7 @@ credentials.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- Third-party code (kept outside repo, but defensive ignore) ----------
+external/
+CheXbert/
