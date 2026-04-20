@@ -10,14 +10,15 @@ dropout: 0.1             # applied after each LSTM step
 s_max: 6                 # max sentences per report (IU X-Ray reports avg ~5)
 n_max: 30                # max tokens per sentence (including BOS + EOS)
 pretrained_encoder: true # use ImageNet DenseNet-121 weights
-reshape_captions: true   # flat (B, seq_len) input from R2Gen loader
+# reshape_captions: true   # flat (B, seq_len) input from R2Gen loader (Removed)
 
 
 # vocab tokens (must match tokenizer built in data pipeline) 
 # confirm bos_id / eos_id / pad_id 
-bos_id: 1 
-eos_id: 2
-pad_id: 0
+# Get passed from tokenizer
+# bos_id: 1 
+# eos_id: 2
+# pad_id: 0
 
 #training
 batch_size: 16
