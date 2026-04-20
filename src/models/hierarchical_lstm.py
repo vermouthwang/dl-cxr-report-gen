@@ -7,13 +7,12 @@ Based on:
 
 Adaptations for this project:
   - DenseNet-121 encoder (CheXNet-compatible) instead of VGG
-  - R2Gen IU X-Ray data format: batch is (images_id, images, reports_ids, reports_masks, labels)
-      images:       (B, 2, 3, H, W) - frontal + lateral stacked by R2Gen loader
-      reports_ids:  (B, seq_len) - flat token ids, NOT (B, s_max, n_max)
-      reports_masks:(B, seq_len) - 1 for real token, 0 for pad
-  - Split the flat report into sentences inside the model using EOS token
-  - forward(images, captions, masks) interface for the shared training script
-  - generate() returns flat token list for direct BLEU/METEOR evaluation
+  - Dataloader batch format: (images, input_tokens, target_tokens, lengths, image_ids)
+      images:        (B, C, H, W)
+      target_tokens: (B, T) flat token ids, split internally at EOS into sentences
+      lengths:       (B,)   true sequence length per sample
+  - forward(images, captions) where captions = (input_tokens, target_tokens, lengths)
+  - generate() returns (B, T_out) LongTensor padded with 0
 """
 
 import torch
@@ -202,60 +201,53 @@ class HierarchicalLSTM(nn.Module):
     """
     Hierarchical LSTM for CXR report generation.
 
-    DATA FORMAT (R2Gen / IU X-Ray with annotation.json split):
-    The R2Gen dataloader returns a 5-tuple per batch:
+    DATA FORMAT (interfaces.md: 5-tuple):
+    The dataloader yields per batch:
 
-        images_id     list[str]         study IDs  (not used in forward)
-        images        (B, 2, 3, H, W)   frontal + lateral stacked
-        reports_ids   (B, seq_len)       flat token ids, padded with 0
-        reports_masks (B, seq_len)       1=real token, 0=pad
-        labels        (B, n_classes)     CheXpert labels (not used here)
+        images        (B, C, H, W)      preprocessed X-ray images
+        input_tokens  (B, T)            BOS-prepended token ids (not used internally)
+        target_tokens (B, T)            flat token ids split at EOS into sentences
+        lengths       (B,)              true sequence length per sample
+        image_ids     list[str]         image identifiers (not used in forward)
 
-    Because R2Gen stores reports as a flat sequence (not split into sentences),
-    we re-split at EOS tokens inside this model. The EOS token id must be
-    passed when constructing the model (see eos_id param).
+     Forward interface (matches interfaces.md):
 
-    Forward interface (should match shared training script):
-
-        loss = model(images, captions, masks)
-          images   : (B, 2, 3, H, W)
-          captions : (B, seq_len)  - reports_ids from dataloader
-          masks    : (B, seq_len)  - reports_masks from dataloader
-
-    R2Gen's IU X-Ray loader returns reports_ids as a flat 1-D-per-sample
-    token sequence.  We reshape it internally into (B, s_max, n_max) by
-    splitting at EOS boundaries.  If DataLoader already produces
-    (B, s_max, n_max), set reshape_captions=False in the constructor.
+        loss = model(images, captions)
+          images   : (B, C, H, W)
+          captions : (input_tokens, target_tokens, lengths)
+                     target_tokens is split internally at EOS boundaries
+                     into (B, s_max, n_max) for the hierarchical decode.
     """
 
     def __init__(self,
                  vocab_size        : int,
+                 bos_id            : int,   
+                 eos_id            : int,   
+                 pad_id            : int,
                  embed_size        : int   = 512,
                  hidden_size       : int   = 512,
                  word_num_layers   : int   = 2,
                  dropout           : float = 0.1,
                  s_max             : int   = 6,
                  n_max             : int   = 30,
-                 bos_id            : int   = 1,
-                 eos_id            : int   = 2,
-                 pad_id            : int   = 0,
-                 pretrained_encoder: bool  = True,
-                 reshape_captions  : bool  = True):
+                 pretrained_encoder: bool  = True):
+                #  reshape_captions  : bool  = True):
         """
         Args:
-            vocab_size         -- size of shared vocabulary (from tokenizer)
-            embed_size         -- word embedding + visual projection size
-            hidden_size        -- LSTM hidden size
-            word_num_layers    -- layers in the word LSTM (2 per Jing et al.)
-            dropout            -- applied after each LSTM step
-            s_max              -- max sentences per report
-            n_max              -- max words per sentence (including BOS/EOS)
-            bos_id             -- begin-of-sentence token id
-            eos_id             -- end-of-sentence token id (set from tokenizer!)
-            pad_id             -- padding token id (used as ignore_index in loss)
-            pretrained_encoder -- load ImageNet DenseNet-121 weights
-            reshape_captions   -- True  -> expects flat (B, seq_len) from R2Gen
+            vocab_size         - size of shared vocabulary (from tokenizer)
+            embed_size         - word embedding + visual projection size
+            hidden_size        - LSTM hidden size
+            word_num_layers    - layers in the word LSTM (2 per Jing et al.)
+            dropout            - applied after each LSTM step
+            s_max              - max sentences per report
+            n_max              - max words per sentence (including BOS/EOS)
+            bos_id             - begin-of-sentence token id
+            eos_id             - end-of-sentence token id (set from tokenizer!)
+            pad_id             - padding token id (used as ignore_index in loss)
+            pretrained_encoder - load ImageNet DenseNet-121 weights
+            reshape_captions   - True  -> expects flat (B, seq_len) from R2Gen
                                    False -> expects (B, s_max, n_max) already
+            Update: Removed reshape_captions
         """
         super().__init__()
         self.s_max            = s_max
@@ -263,7 +255,7 @@ class HierarchicalLSTM(nn.Module):
         self.bos_id           = bos_id
         self.eos_id           = eos_id
         self.pad_id           = pad_id
-        self.reshape_captions = reshape_captions
+        # self.reshape_captions = reshape_captions
 
         self.encoder   = VisualEncoder(embed_size=embed_size,
                                        pretrained=pretrained_encoder)
@@ -284,7 +276,6 @@ class HierarchicalLSTM(nn.Module):
                                                    reduction='mean')
         self.stop_criterion = nn.CrossEntropyLoss(reduction='mean')
 
-    #Image encoding - handles (B, 2, 3, H, W) dual-view from R2Gen
    
     def _encode(self, images):
         """
@@ -305,7 +296,7 @@ class HierarchicalLSTM(nn.Module):
     
     # Reshape flat R2Gen captions -> (B, s_max, n_max)
 
-    def _reshape_flat_captions(self, flat_ids, mask):
+    def _reshape_flat_captions(self, flat_ids, lengths):
         """
         Convert R2Gen flat token sequence to (B, s_max, n_max) sentence grid.
 
@@ -315,7 +306,7 @@ class HierarchicalLSTM(nn.Module):
 
         Args:
             flat_ids (B, seq_len) - token ids, 0-padded
-            mask     (B, seq_len) - 1 for real tokens, 0 for pad
+            lengths     (B,) - true seq length per sample
 
         Returns:
             cap2d (B, s_max, n_max) - long tensor, 0-padded
@@ -326,7 +317,7 @@ class HierarchicalLSTM(nn.Module):
                              dtype=torch.long, device=device)
 
         for b in range(B):
-            length = int(mask[b].sum().item())
+            length = int(lengths[b].item())
             tokens = flat_ids[b, :length].tolist()
 
             # split into sentences at every EOS token
@@ -360,30 +351,26 @@ class HierarchicalLSTM(nn.Module):
         return (1 - (cap2d.sum(-1) > 0).long())
 
     
-    # Training forward - called as model(images, captions, masks)
+    # Training forward - called as model(images, captions)
     
-
-    def forward(self, images, captions, masks=None):
+    #Changing it as per interfaces.md
+    def forward(self, images, captions):
         """
         Teacher-forcing forward pass.
 
         Args:
-            images   (B, 2, 3, H, W)  -- stacked frontal + lateral (R2Gen format)
-            captions (B, seq_len)      -- flat reports_ids from R2Gen loader
-                                          OR (B, s_max, n_max) if reshape_captions=False
-            masks    (B, seq_len)      -- reports_masks (required when reshape_captions=True)
+            images   (B, 2, 3, H, W)  - stacked frontal + lateral (R2Gen format)
+            captions Tuple[input_tokens, target_tokens, lengths]
+                        input_tokens  (B, T) - not used internally, kept for interface compliance
+                        target_tokens (B, T) - flat token ids, split into sentences at EOS
+                        lengths       (B,)   - true sequence length per sample
 
         Returns:
             loss : scalar tensor
         """
-        # reshape flat -> 2D if coming from R2Gen loader
-        if self.reshape_captions and captions.dim() == 2:
-            assert masks is not None, \
-                "masks (reports_masks from R2Gen dataloader) are required " \
-                "when reshape_captions=True"
-            cap2d = self._reshape_flat_captions(captions, masks)
-        else:
-            cap2d = captions            # already (B, s_max, n_max)
+
+        input_tokens, target_tokens, lengths = captions
+        cap2d = self._reshape_flat_captions(target_tokens, lengths)
 
         B, s_max, n_max = cap2d.shape
 
@@ -398,13 +385,13 @@ class HierarchicalLSTM(nn.Module):
 
         # stop loss
         stop_tgt  = self._stop_targets(cap2d)                   # (B, s_max)
+        #Stop loss masking
+        active_slots = (cap2d.sum(-1) > 0).view(B * s_max)   # True for non-padding sentences
         stop_loss = self.stop_criterion(
-            stop_probs.view(B * s_max, 2),
-            stop_tgt.view(B * s_max))
+            stop_probs.view(B * s_max, 2)[active_slots],
+            stop_tgt.view(B * s_max)[active_slots])
 
         # word loss (teacher forcing per sentence)
-        # input = cap2d[:, s, :-1] (feed BOS ... last-1)
-        # target = cap2d[:, s, 1:] (predict 2nd ... last)
         word_loss  = torch.tensor(0.0, device=images.device)
         word_in    = cap2d[:, :, :-1]       # (B, s_max, n_max-1)
         word_tgt   = cap2d[:, :, 1:]        # (B, s_max, n_max-1)
@@ -434,23 +421,27 @@ class HierarchicalLSTM(nn.Module):
 
 
     @torch.no_grad()
-    def generate(self, images, max_len=None):
+    #Changing it as per interface.md
+    def generate(self, images, max_length=100, beam_size=1):
         """
         Greedy decoding.  Returns flat token id lists (one per sample)
         ready for pycocoevalcap / CheXbert scoring.
 
-        Args:
-            images  (B, 2, 3, H, W)
-            max_len  override n_max if desired
+         Args:
+            images     (B, C, H, W)
+            max_length  override n_max if desired
+            beam_size   1 = greedy (only supported value)
 
         Returns:
-            reports : list[list[int]] -- B lists of token ids, no padding
+            out : (B, T_out) LongTensor, padded with 0, includes <EOS> when generated
         """
-        n_max    = max_len or self.n_max
+        if beam_size > 1:
+            raise NotImplementedError("Beam search not implemented for HierarchicalLSTM")
+        n_max    = max_length or self.n_max
         B        = images.size(0)
         avg, sp  = self._encode(images)
         topics, stop_probs = self.sent_lstm(avg, sp, self.co_att, self.s_max)
-        stop_pred = stop_probs.argmax(-1)           # (B, s_max) -- 1=stop
+        stop_pred = stop_probs.argmax(-1)           # (B, s_max) - 1=stop
 
         reports = [[] for _ in range(B)]
 
@@ -465,7 +456,12 @@ class HierarchicalLSTM(nn.Module):
             for i, b in enumerate(idx.tolist()):
                 toks = words[i].tolist()
                 if self.eos_id in toks:
-                    toks = toks[:toks.index(self.eos_id)]
-                reports[b].extend(toks)   # flat list -- consistent with R2Gen eval
+                    toks = toks[:toks.index(self.eos_id) + 1]
+                reports[b].extend(toks)   # flat list - consistent with R2Gen eval
 
-        return reports
+        max_out = max((len(r) for r in reports), default=1)
+        out = torch.zeros(B, max_out, dtype=torch.long, device=images.device)
+        for i, r in enumerate(reports):
+            if r:
+                out[i, :len(r)] = torch.tensor(r, dtype=torch.long, device=images.device)
+        return out
