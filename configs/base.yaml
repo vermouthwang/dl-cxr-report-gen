@@ -1,0 +1,75 @@
+# configs/base.yaml
+# Canonical defaults for all training runs. Model-specific configs (dummy.yaml,
+# lstm.yaml, transformer.yaml) use `_base_: "base.yaml"` and override only what
+# they need.
+
+experiment:
+  name: "baseline"                  # used as W&B run name + checkpoint dir name
+  seed: 42
+  output_dir: "outputs"             # checkpoints at outputs/<experiment.name>/{last,best}.pt
+
+data:
+  root: null                        # null -> IU_XRAY_ROOT env var or built-in default
+  batch_size: 32
+  num_workers: 2                    # set to 0 if SLURM worker hangs appear
+  max_report_len: 60                # max tokens per report, INCLUDING BOS/EOS
+  min_word_freq: 3                  # words with count < this become <UNK>
+
+model:
+  name: "dummy"                     # key in src/models/__init__.py _MODEL_REGISTRY
+  config:                           # passed verbatim to the model constructor
+    hidden_dim: 256
+    # Each model decides its own config keys. Validation of these keys is the
+    # model's responsibility.
+
+optimizer:
+  name: "adamw"
+  lr: 1.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  # Optional: override LR/WD per parameter-name prefix.
+  # Useful for fine-tuning pretrained encoders with a lower LR than the decoder.
+  # Example (commented):
+  # param_groups:
+  #   - name: "encoder"          # params whose name starts with "encoder."
+  #     lr: 5.0e-5
+  #     weight_decay: 5.0e-5
+
+scheduler:
+  name: "linear_warmup_cosine"      # or "none"
+  # Set exactly ONE of warmup_steps or warmup_epochs.
+  warmup_steps: null
+  warmup_epochs: 2
+  min_lr_ratio: 0.1                 # final LR = lr * min_lr_ratio
+
+training:
+  epochs: 50
+  grad_clip_norm: 1.0               # null to disable
+  mixed_precision: true             # torch.cuda.amp + GradScaler
+  log_every_n_steps: 20
+
+validation:
+  every_n_epochs: 1
+  generate_samples_every_n_epochs: 5
+  num_sample_generations: 5         # how many sample reports to log to W&B
+  generation_max_length: 60
+  beam_size: 1                      # greedy for now
+
+early_stopping:
+  enabled: true
+  metric: "val_loss"                # switch to "val_bleu4" (or similar) once Yousuf's evaluator lands
+  mode: "min"                       # "min" for loss, "max" for BLEU/CIDEr
+  patience: 10
+  min_delta: 0.0
+
+checkpoint:
+  save_last: true
+  save_best: true
+  # Intentionally no keep-top-k. last + best only — keeps scratch lean.
+
+wandb:
+  enabled: true
+  entity: "yinghou-georgia-institute-of-technology"
+  project: "dl-cxr-report-gen"
+  tags: []
+  # WANDB_MODE env var still works: set WANDB_MODE=offline to log locally.

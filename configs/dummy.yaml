@@ -1,0 +1,35 @@
+# configs/dummy.yaml
+# Minimal config for smoke-testing the training pipeline.
+# 2 epochs, tiny model, fast iteration.
+_base_: "base.yaml"
+
+experiment:
+  name: "dummy_smoke_test"
+
+data:
+  batch_size: 32
+  num_workers: 2
+
+model:
+  name: "dummy"
+  config:
+    hidden_dim: 128
+    image_feature_dim: 64
+
+scheduler:
+  warmup_steps: null
+  warmup_epochs: 1
+
+training:
+  epochs: 2
+  log_every_n_steps: 5
+
+validation:
+  generate_samples_every_n_epochs: 1    # every epoch during smoke test
+  num_sample_generations: 3
+
+early_stopping:
+  enabled: false                        # 2 epochs, no point
+
+wandb:
+  tags: ["smoke-test", "dummy"]
