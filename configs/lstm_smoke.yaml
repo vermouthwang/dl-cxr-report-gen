@@ -1,0 +1,23 @@
+# configs/lstm_smoke.yaml
+# Smoke-test variant of lstm.yaml. 2 epochs, small batch, fast iteration.
+_base_: "lstm.yaml"
+
+experiment:
+  name: "lstm_smoke_test"
+
+data:
+  batch_size: 8
+
+training:
+  epochs: 2
+  log_every_n_steps: 5
+
+validation:
+  generate_samples_every_n_epochs: 1
+  num_sample_generations: 3
+
+early_stopping:
+  enabled: false
+
+wandb:
+  tags: ["smoke-test", "hierarchical_lstm"]

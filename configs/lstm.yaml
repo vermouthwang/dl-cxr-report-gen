@@ -1,42 +1,67 @@
-#Hierarchical LSTM parameters
+# configs/lstm.yaml
+# Hierarchical LSTM (Jing et al., ACL 2018), wrapped via
+# src/models/hierarchical_lstm_adapter.py. See that file for the interface-translation
+# layer between our shared training loop and Yousuf's HierarchicalLSTM class.
 
-model: hierarchical_lstm
+_base_: "base.yaml"
 
-# architecture
-embed_size: 512          # word embedding size AND visual projection size
-hidden_size: 512         # LSTM hidden units (both sentence and word LSTM)
-word_num_layers: 2       # layers in word LSTM (2 per Jing et al.)
-dropout: 0.1             # applied after each LSTM step
-s_max: 6                 # max sentences per report (IU X-Ray reports avg ~5)
-n_max: 30                # max tokens per sentence (including BOS + EOS)
-pretrained_encoder: true # use ImageNet DenseNet-121 weights
-# reshape_captions: true   # flat (B, seq_len) input from R2Gen loader (Removed)
+experiment:
+  name: "lstm_hierarchical"
 
+data:
+  batch_size: 16
+  num_workers: 4
 
-# vocab tokens (must match tokenizer built in data pipeline) 
-# confirm bos_id / eos_id / pad_id 
-# Get passed from tokenizer
-# bos_id: 1 
-# eos_id: 2
-# pad_id: 0
+model:
+  name: "hierarchical_lstm"
+  config:
+    embed_size: 512
+    hidden_size: 512
+    word_num_layers: 2
+    dropout: 0.1
+    s_max: 6
+    n_max: 30
+    pretrained_encoder: true
 
-#training
-batch_size: 16
-epochs: 30
-learning_rate: 1.0e-4    # AdamW lr for decoder
-lr_encoder: 5.0e-5       # lower lr for pretrained DenseNet encoder (freeze first few epochs)
-weight_decay: 5.0e-5
-grad_clip: 5.0           # gradient clipping max norm — important for LSTM stability
-freeze_encoder_epochs: 5 # freeze CNN for first N epochs, then unfreeze
-num_workers: 4
-max_seq_length: 60       # R2Gen default — flat sequence length before reshape
+optimizer:
+  name: "adamw"
+  lr: 1.0e-4
+  weight_decay: 5.0e-5
+  param_groups:
+    - name: "hlstm.encoder"
+      lr: 5.0e-5
+      weight_decay: 5.0e-5
 
+scheduler:
+  name: "linear_warmup_cosine"
+  warmup_epochs: 2
+  warmup_steps: null
+  min_lr_ratio: 0.1
 
-# Scheduler
-scheduler: cosine        # cosine annealing
-warmup_epochs: 2
+training:
+  epochs: 30
+  grad_clip_norm: 5.0
+  mixed_precision: true
+  log_every_n_steps: 20
 
-# Early stopping
-monitor_metric: BLEU_4
-monitor_mode: max
-patience: 10             # stop if no improvement for 10 epochs
+validation:
+  every_n_epochs: 1
+  generate_samples_every_n_epochs: 5
+  num_sample_generations: 5
+  generation_max_length: 30
+  beam_size: 1
+
+early_stopping:
+  enabled: true
+  metric: "val_loss"
+  mode: "min"
+  patience: 10
+  min_delta: 0.0
+
+checkpoint:
+  save_last: true
+  save_best: true
+
+wandb:
+  enabled: true
+  tags: ["hierarchical_lstm", "baseline"]
