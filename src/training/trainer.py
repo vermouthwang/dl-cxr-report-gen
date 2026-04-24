@@ -260,7 +260,7 @@ class Trainer:
             if torch.isnan(loss) or torch.isinf(loss):
                 # Don't recover — dump state and exit so the user investigates.
                 crash_path = self.output_dir / "nan_crash.pt"
-                torch.save({"step": self.global_step, "epoch": epoch, "loss": float(loss)}, crash_path)
+                torch.save({"step": self.global_step, "epoch": epoch, "loss": float(loss.detach())}, crash_path)
                 raise RuntimeError(
                     f"NaN/Inf loss at epoch {epoch}, step {step}. State dumped to {crash_path}."
                 )

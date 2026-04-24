@@ -41,7 +41,7 @@ scheduler:
 training:
   epochs: 30
   grad_clip_norm: 5.0
-  mixed_precision: true
+  mixed_precision: false    # LSTMs are fp16-unstable; disable AMP
   log_every_n_steps: 20
 
 validation:
