@@ -13,26 +13,16 @@ What this adapter does:
      and unpacks config into HierarchicalLSTM kwargs.
   2. Accepts our forward signature:
         forward(images, input_tokens, target_tokens, lengths)
-     and reconstructs the captions+masks tensors his model expects:
-        captions  = [BOS, w1, ..., wN, EOS]  (reconstructed from input + target)
-        masks     = 1s for real tokens, 0s for padding, from `lengths`
+     and bundles (input_tokens, target_tokens, lengths) into the tuple
+     Yousuf's forward expects.
   3. Returns the dict {"loss": ..., "logits": ...} our trainer expects.
      Note: HierarchicalLSTM does not naturally produce flat (B, T, V) logits.
      We return a placeholder zero tensor with the right shape. The trainer
      never reads logits during training (only output["loss"]), so this is safe.
-  4. Adapts generate() signature from (images, max_len=None) to
-     (images, max_length, beam_size=1). beam_size is accepted but ignored
-     (Yousuf's model is greedy).
+  4. Adapts generate(): Yousuf's returns a (B, T_out) LongTensor, our trainer
+     expects list[list[int]]. The adapter converts.
   5. Configures sentence boundaries to use <SEP> (id 4) instead of <EOS>,
      matching the updated tokenizer (see src/data/iu_xray.py).
-
-Important setup notes for Yousuf's model:
-  - pretrained DenseNet-121 weights are downloaded on first instantiation.
-    On PACE, run `scripts/cache_densenet_weights.py` on the login node once
-    so the weights are cached in $TORCH_HOME before compute-node runs.
-  - encoder submodule is named `self.encoder` inside HierarchicalLSTM, so
-    the optimizer's param_groups "hlstm.encoder" prefix will match correctly
-    for the lower-LR encoder fine-tuning (see configs/lstm.yaml).
 """
 from __future__ import annotations
 
@@ -47,7 +37,6 @@ class HierarchicalLSTMAdapter(nn.Module):
     def __init__(self, vocab_size: int, config: dict):
         super().__init__()
 
-        # Unpack config with defaults matching his YAML.
         hl_kwargs = dict(
             vocab_size=vocab_size,
             embed_size=int(config.get("embed_size", 512)),
@@ -57,69 +46,39 @@ class HierarchicalLSTMAdapter(nn.Module):
             s_max=int(config.get("s_max", 6)),
             n_max=int(config.get("n_max", 30)),
             bos_id=BOS_ID,
-            # Use <SEP> as the sentence boundary token. HierarchicalLSTM's
-            # `eos_id` param is what its reshape splits on - we repurpose that
-            # parameter to mean "sentence separator" without renaming it in
-            # his code. The real end-of-report EOS still exists at id 2;
-            # his reshape just won't see it as a split point, which is
-            # correct (the whole report is one unit of sentences, not one
-            # sentence itself).
-            eos_id=SEP_ID,
+            eos_id=SEP_ID,        # use <SEP> as the sentence-boundary splitter
             pad_id=PAD_ID,
             pretrained_encoder=bool(config.get("pretrained_encoder", True)),
-            reshape_captions=True,   # we always feed flat sequences
         )
         self.hlstm = HierarchicalLSTM(**hl_kwargs)
         self.vocab_size = vocab_size
 
-        # For generate() - actual end of report, not sentence boundary
-        self.true_eos_id = EOS_ID
-
-    def forward(
-        self,
-        images: torch.Tensor,
-        input_tokens: torch.Tensor,
-        target_tokens: torch.Tensor,
-        lengths: torch.Tensor,
-    ) -> dict:
-        """
-        Our trainer passes pre-shifted tensors:
-            input_tokens  = [BOS, w1, ..., wN]
-            target_tokens = [w1, ..., wN, EOS]
-        Yousuf's model expects the full un-shifted sequence:
-            captions      = [BOS, w1, ..., wN, EOS]
-        We reconstruct it by concatenating input_tokens[:, 0:1] (BOS) with
-        target_tokens (which ends in EOS).
-        """
+    def forward(self, images, input_tokens, target_tokens, lengths):
         B, T = input_tokens.shape
         device = input_tokens.device
 
-        # Reconstruct full sequence: [BOS, w1, ..., wN, EOS]
-        bos_col = input_tokens[:, :1]                                # (B, 1)
-        captions = torch.cat([bos_col, target_tokens], dim=1)        # (B, T+1)
+        # Drop the final EOS from each sample's sequence before handing to
+        # HierarchicalLSTM. Reason: our dataloader appends EOS (id 2) at
+        # position lengths[b]-1 of target_tokens. His _reshape_flat_captions
+        # splits on SEP (id 4); the trailing EOS, arriving after the final
+        # SEP, forms a lone-token "sentence" whose teacher-forcing target
+        # after shift is all-PAD, which makes CrossEntropyLoss return NaN.
+        # Dropping EOS from the training signal is harmless: his model learns
+        # to stop via stop_probs, not via predicting EOS in the word LSTM.
+        lengths_no_eos = (lengths - 1).clamp(min=0)
 
-        # Masks: 1 for real tokens, 0 for pad.
-        # Full sequence has lengths[b] + 1 real tokens (BOS + all non-pad targets).
-        full_lengths = lengths + 1
-        arange = torch.arange(T + 1, device=device).unsqueeze(0)     # (1, T+1)
-        masks = (arange < full_lengths.unsqueeze(1)).long()          # (B, T+1)
-
-        loss = self.hlstm(images, captions, masks)
-
-        # Placeholder logits - HierarchicalLSTM does not produce flat logits
-        # per time step. Trainer does not use logits during training.
-        # Return a zero tensor with the right shape to satisfy the interface.
+        loss = self.hlstm(images, (input_tokens, target_tokens, lengths_no_eos))
         dummy_logits = torch.zeros(B, T, self.vocab_size, device=device)
-
         return {"loss": loss, "logits": dummy_logits}
 
     @torch.no_grad()
-    def generate(self, images: torch.Tensor, max_length: int, beam_size: int = 1) -> list[list[int]]:
-        """
-        Adapt the generate() signature.
-        Yousuf's model is greedy-only; beam_size is accepted but ignored.
-        max_length is interpreted as the per-sentence limit (passed as max_len);
-        total generated tokens can still exceed this across multiple sentences.
-        """
-        reports = self.hlstm.generate(images, max_len=max_length)
+    def generate(self, images, max_length, beam_size=1):
+        out_tensor = self.hlstm.generate(images, max_length=max_length, beam_size=beam_size)
+        reports = []
+        for row in out_tensor.tolist():
+            while row and row[-1] == PAD_ID:
+                row.pop()
+            if EOS_ID in row:
+                row = row[: row.index(EOS_ID)]
+            reports.append(row)
         return reports
