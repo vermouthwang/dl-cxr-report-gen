@@ -311,8 +311,8 @@ class Trainer:
     def _validate(self, epoch: int) -> tuple[dict, list]:
         self.model.eval()
         losses: list[float] = []
-        hypotheses: list[str] = []
-        references: list[str] = []
+        hypotheses: dict[str, str] = {}    # image_id -> generated text
+        references: dict[str, str] = {}    # image_id -> ground-truth text
         sample_rows: list[list[str]] = []
 
         do_generate = ((epoch + 1) % self.gen_every_n == 0)
@@ -338,9 +338,10 @@ class Trainer:
                 for j, gen_ids in enumerate(gen_ids_batch):
                     hyp = self.vocab.decode(gen_ids)
                     ref = self.vocab.decode(target_tokens[j, : int(lengths[j].item())].tolist())
-                    hypotheses.append(hyp)
-                    references.append(ref)
-                    sample_rows.append([image_ids[j], ref, hyp])
+                    img_id = image_ids[j]
+                    hypotheses[img_id] = hyp
+                    references[img_id] = ref
+                    sample_rows.append([img_id, ref, hyp])
 
         metrics = {"val_loss": float(np.mean(losses))}
 
