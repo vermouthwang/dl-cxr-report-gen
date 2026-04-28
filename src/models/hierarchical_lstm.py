@@ -398,7 +398,8 @@ class HierarchicalLSTM(nn.Module):
         active_cnt = 0
 
         for s in range(s_max):
-            active = (cap2d[:, s, :].sum(-1) > 0)   # samples that have sentence s
+            # active = (cap2d[:, s, :].sum(-1) > 0)   # samples that have sentence s
+            active = (word_tgt[:, s, :].sum(-1) > 0)   # samples with non-pad targets after shift
             if not active.any():
                 continue
             active_cnt += 1
