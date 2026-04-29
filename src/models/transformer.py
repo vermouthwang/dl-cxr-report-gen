@@ -64,6 +64,7 @@ class TransformerCaptioner(nn.Module):
         embed_size         = int(config.get("embed_size", 512))
         n_heads            = int(config.get("n_heads", 8))
         n_layers           = int(config.get("n_layers", 6))
+        d_ff               = int(config.get("d_ff", 2048))
         dropout            = float(config.get("dropout", 0.1))
         pretrained_encoder = bool(config.get("pretrained_encoder", True))
         freeze_encoder     = bool(config.get("freeze_encoder", True))
@@ -82,14 +83,19 @@ class TransformerCaptioner(nn.Module):
         self.decoder_embedding = nn.Embedding(vocab_size, embed_size, padding_idx=PAD_ID)
         self.pos_encoder = PositionalEncoding(embed_size) # As defined before
 
-        self.transformer = nn.Transformer(
+        # Decoder-only stack: visual tokens go straight to cross-attention.
+        # (Earlier draft used nn.Transformer(num_encoder_layers=0); PyTorch 2.11
+        #  errors on that path because nn.TransformerEncoder.forward indexes
+        #  self.layers[0]. nn.TransformerDecoder is the cleaner expression of
+        #  the spec anyway.)
+        decoder_layer = nn.TransformerDecoderLayer(
             d_model=embed_size,
             nhead=n_heads,
-            num_encoder_layers=0, # spec: no self-attn over visual tokens; cross-attn only
-            num_decoder_layers=n_layers,
+            dim_feedforward=d_ff,
             dropout=dropout,
-            batch_first=True
+            batch_first=True,
         )
+        self.transformer = nn.TransformerDecoder(decoder_layer, num_layers=n_layers)
 
         self.fc_out = nn.Linear(embed_size, vocab_size)
 
@@ -105,11 +111,11 @@ class TransformerCaptioner(nn.Module):
         tgt = self.pos_encoder(self.decoder_embedding(input_tokens))
 
         # 4. Create mask
-        tgt_mask = self.transformer.generate_square_subsequent_mask(input_tokens.size(1)).to(images.device)
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(input_tokens.size(1)).to(images.device)
         padding_mask = (input_tokens == PAD_ID)
 
-        # 5. Transformer does the cross-attention between 49 visual tokens and captions
-        out = self.transformer(visual_tokens, tgt, tgt_mask=tgt_mask, tgt_key_padding_mask=padding_mask)
+        # 5. Decoder cross-attends from caption tokens to the 49 visual tokens
+        out = self.transformer(tgt, visual_tokens, tgt_mask=tgt_mask, tgt_key_padding_mask=padding_mask)
         logits = self.fc_out(out)
 
         # 6. Cross-entropy against EOS-suffixed targets, ignoring PAD positions
@@ -137,8 +143,8 @@ class TransformerCaptioner(nn.Module):
 
         for _ in range(max_length - 1):
             tgt = self.pos_encoder(self.decoder_embedding(tokens))
-            tgt_mask = self.transformer.generate_square_subsequent_mask(tokens.size(1)).to(device)
-            out = self.transformer(visual_tokens, tgt, tgt_mask=tgt_mask)
+            tgt_mask = nn.Transformer.generate_square_subsequent_mask(tokens.size(1)).to(device)
+            out = self.transformer(tgt, visual_tokens, tgt_mask=tgt_mask)
             next_token = self.fc_out(out[:, -1, :]).argmax(dim=-1)  # (B,)
             # Once a sample has emitted EOS, freeze it by appending PAD.
             next_token = torch.where(finished, torch.full_like(next_token, PAD_ID), next_token)
