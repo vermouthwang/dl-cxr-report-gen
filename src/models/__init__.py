@@ -8,13 +8,14 @@ import torch.nn as nn
 
 from src.models.dummy import DummyModel
 from src.models.hierarchical_lstm_adapter import HierarchicalLSTMAdapter
+from src.models.transformer import TransformerCaptioner
 
 # Registry of model_name (as used in configs) -> class
 _MODEL_REGISTRY: dict[str, type[nn.Module]] = {
     "dummy": DummyModel,
-    "hierarchical_lstm": HierarchicalLSTMAdapter,   # Yousuf      
-    # "transformer": VanillaTransformer,           
-    # "clinical_transformer": ClinicalTransformer,  
+    "hierarchical_lstm": HierarchicalLSTMAdapter,   # Yousuf
+    "transformer": TransformerCaptioner,            # Murad (interface-adapted on yw/fix-transformer-interface)
+    # "clinical_transformer": ClinicalTransformer,
 }
 
 
