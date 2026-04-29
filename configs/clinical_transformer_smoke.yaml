@@ -1,0 +1,29 @@
+# configs/clinical_transformer_smoke.yaml
+# 2-epoch smoke test for the clinical-term-guided Transformer.
+# Inherits from clinical_transformer.yaml; keeps clinical guidance ON so the
+# smoke run actually exercises the weighted CE + decoding-bias paths.
+_base_: "clinical_transformer.yaml"
+
+experiment:
+  name: "clinical_transformer_smoke"
+
+data:
+  batch_size: 8
+  num_workers: 2
+
+scheduler:
+  name: "none"                      # warmup_epochs=2 would equal training.epochs and crash the builder
+
+training:
+  epochs: 2
+  log_every_n_steps: 5
+
+validation:
+  generate_samples_every_n_epochs: 1
+  num_sample_generations: 3
+
+early_stopping:
+  enabled: false
+
+wandb:
+  tags: ["smoke-test", "clinical_transformer"]

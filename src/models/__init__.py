@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import torch.nn as nn
 
+from src.models.clinical_transformer import ClinicalTransformer
 from src.models.dummy import DummyModel
 from src.models.hierarchical_lstm_adapter import HierarchicalLSTMAdapter
 from src.models.transformer import TransformerCaptioner
@@ -16,6 +17,8 @@ _MODEL_REGISTRY: dict[str, type[nn.Module]] = {
     "hierarchical_lstm": HierarchicalLSTMAdapter,   # Yousuf
     "transformer": TransformerCaptioner,            # Murad (interface-adapted on yw/fix-transformer-interface)
     # "clinical_transformer": ClinicalTransformer,
+    # "transformer": VanillaTransformer,            # Murad
+    "clinical_transformer": ClinicalTransformer,    # Yinghou
 }
 
 
