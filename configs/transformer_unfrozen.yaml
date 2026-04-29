@@ -1,0 +1,28 @@
+# configs/transformer_unfrozen.yaml
+# Ablation of transformer.yaml: unfreeze the DenseNet encoder and fine-tune
+# at a lower LR (5e-5) than the decoder (1e-4). Mirrors the LSTM convention
+# in configs/lstm.yaml. Tests whether encoder fine-tuning closes the gap
+# between train/val loss seen in the frozen baseline.
+#
+# Frozen baseline (configs/transformer.yaml) result:
+#   val_bleu1=0.2064 val_bleu2=0.0872 (early-stopped at epoch 15)
+
+_base_: "transformer.yaml"
+
+experiment:
+  name: "transformer_unfrozen"
+
+model:
+  config:
+    freeze_encoder: false
+
+optimizer:
+  # Two LR groups: encoder (DenseNet) trains slower than the decoder so
+  # ImageNet weights aren't blown out. Matches the LSTM's pattern.
+  param_groups:
+    - name: "encoder"          # matches model.encoder.* params
+      lr: 5.0e-5
+      weight_decay: 5.0e-5
+
+wandb:
+  tags: ["transformer", "unfrozen", "ablation"]
