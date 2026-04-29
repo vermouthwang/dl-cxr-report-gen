@@ -69,6 +69,7 @@ Thumbs.db
 # ...but DO allow small config/docs files of these types:
 !configs/**/*.json
 !configs/**/*.yaml
+!data_meta/**/*.json
 !docs/**/*.png
 !docs/**/*.jpg
 !requirements*.txt

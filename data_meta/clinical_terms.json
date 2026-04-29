@@ -1,0 +1,84 @@
+{
+  "_doc": [
+    "Curated clinical lexicon for the IU X-Ray report generation project.",
+    "Maps the 14 CheXpert finding categories to seed words that appear (or are intended to appear)",
+    "in the training vocabulary. Words missing from the vocab are tolerated by the loader and logged.",
+    "",
+    "Three tiers:",
+    "  - 'findings'   : per-category seed words (CheXpert ontology)",
+    "  - 'negations'  : negation/reassurance words that flip clinical meaning",
+    "  - 'hedges'     : uncertainty markers (kept for ablation; OFF by default)",
+    "",
+    "If a word appears in multiple tiers, the loader applies the highest assigned weight.",
+    "",
+    "Curated from: CheXpert label list + manual review of common chest X-ray reporting phrasing.",
+    "Verified against vocab.json (975 tokens, min_freq=3) on 2026-04-26."
+  ],
+
+  "findings": {
+    "No Finding": [
+      "normal", "unremarkable", "clear", "negative", "stable", "intact",
+      "patent", "preserved"
+    ],
+    "Enlarged Cardiomediastinum": [
+      "cardiomediastinal", "mediastinal", "mediastinum", "enlarged",
+      "widened", "widening", "prominence", "prominent"
+    ],
+    "Cardiomegaly": [
+      "cardiomegaly", "heart", "cardiac", "enlarged",
+      "cardiopulmonary", "cardiophrenic"
+    ],
+    "Lung Opacity": [
+      "opacity", "opacities", "opacification", "density", "densities",
+      "haziness", "shadow", "shadowing"
+    ],
+    "Lung Lesion": [
+      "lesion", "lesions", "mass", "masses", "nodule", "nodules", "nodular",
+      "fibronodular"
+    ],
+    "Edema": [
+      "edema", "vascular", "congestion", "interstitial",
+      "vasculature", "vasculatures", "engorgement"
+    ],
+    "Consolidation": [
+      "consolidation", "consolidations", "consolidating", "consolidative",
+      "infiltrate", "infiltrates", "airspace"
+    ],
+    "Pneumonia": [
+      "pneumonia", "infection", "infectious"
+    ],
+    "Atelectasis": [
+      "atelectasis", "collapse", "subsegmental", "volume"
+    ],
+    "Pneumothorax": [
+      "pneumothorax", "pneumothoraces"
+    ],
+    "Pleural Effusion": [
+      "pleural", "effusion", "effusions", "fluid",
+      "pleura", "subpleural", "pleuroparenchymal"
+    ],
+    "Pleural Other": [
+      "thickening", "scarring", "scar", "scars", "fibrosis", "fibrotic",
+      "calcification", "calcifications", "calcified", "calcific"
+    ],
+    "Fracture": [
+      "fracture", "fractures", "rib", "ribs", "vertebral", "compression"
+    ],
+    "Support Devices": [
+      "catheter", "tube", "line", "device", "stent", "valve",
+      "endotracheal", "tracheostomy", "picc", "lines",
+      "clip", "clips", "wires", "pacemaker"
+    ]
+  },
+
+  "negations": [
+    "no", "without", "negative",
+    "normal", "clear", "unremarkable", "stable", "intact", "patent"
+  ],
+
+  "hedges": [
+    "may", "might", "could", "possible", "possibly", "likely",
+    "suggests", "suggestive", "appears", "consistent", "concerning",
+    "questionable", "borderline"
+  ]
+}
