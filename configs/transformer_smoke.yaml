@@ -1,0 +1,26 @@
+# configs/transformer_smoke.yaml
+# Smoke-test variant of transformer.yaml. 2 epochs, small batch, fast iteration.
+_base_: "transformer.yaml"
+
+experiment:
+  name: "transformer_smoke_test"
+
+data:
+  batch_size: 8
+
+scheduler:
+  name: "none"
+
+training:
+  epochs: 2
+  log_every_n_steps: 5
+
+validation:
+  generate_samples_every_n_epochs: 1
+  num_sample_generations: 3
+
+early_stopping:
+  enabled: false
+
+wandb:
+  tags: ["smoke-test", "transformer"]
