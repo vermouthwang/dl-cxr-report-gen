@@ -45,8 +45,8 @@ ipython_config.py
 Thumbs.db
 
 # ---------- ML project: data (NEVER commit) ----------
-data/
-datasets/
+/data/                    # repo-root data dir only, not src/data/
+/datasets/                # repo-root datasets dir only
 *.csv
 *.tsv
 *.json
@@ -117,3 +117,8 @@ desktop.ini
 # ---------- Third-party code (kept outside repo, but defensive ignore) ----------
 external/
 CheXbert/
+
+# Local debug/scratch scripts (not for shared branches)
+scripts/dump_vocab.py
+scripts/verify_clinical_vocab.py
+scripts/lstm_debug.sbatch
