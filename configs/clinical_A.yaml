@@ -1,0 +1,94 @@
+# configs/clinical_transformer.yaml
+# Production config for the clinical-term-guided Transformer (Yinghou).
+# This is "cell D" of the 2x2 ablation table — both clinical guidance flags ON.
+#
+# Ablation cells (override `model.config.clinical.*` in derived configs):
+#   A) loss_weighting=false, decoding_bias=false  -> equivalent to vanilla Transformer
+#   B) loss_weighting=true,  decoding_bias=false  -> training-time guidance only
+#   C) loss_weighting=false, decoding_bias=true   -> inference-time guidance only
+#   D) loss_weighting=true,  decoding_bias=true   -> full clinical guidance (this file)
+#
+# Encoder: DenseNet-121 ImageNet-pretrained, fine-tuned at a lower LR via
+# optimizer.param_groups (matches the Hierarchical LSTM convention).
+
+_base_: "base.yaml"
+
+experiment:
+  name: "clinical_transformer_A"
+
+data:
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: "clinical_transformer"
+  config:
+    # ---- Encoder ----
+    pretrained_encoder: true
+    freeze_encoder: false           # fine-tune at low LR via param_groups below
+    use_spatial_pos_embed: true
+
+    # ---- Decoder ----
+    d_model: 512
+    n_heads: 8
+    n_layers: 3
+    d_ff: 2048
+    dropout: 0.3
+    max_position_embeddings: 128    # >= max(max_report_len, generation_max_length+1)
+    tie_word_embeddings: true
+
+    # ---- Clinical guidance ----
+    clinical:
+      lexicon_path: "data_meta/clinical_terms.json"
+      vocab_path:   "data_meta/vocab.json"
+      loss_weighting: false          # Approach 1: weighted CE during training
+      decoding_bias: false           # Approach 2: additive logit bias during generate()
+      alpha_finding: 3.0            # weight multiplier for CheXpert finding tokens
+      alpha_negation: 2.0           # weight multiplier for negation/reassurance tokens
+      alpha_hedge: 1.0              # weight multiplier for hedges (1.0 = OFF)
+      bias_strength: 1.0            # additive logit bias = strength * mask
+      bias_include_negations: true  # include negations in the inference bias mask
+
+optimizer:
+  name: "adamw"
+  lr: 1.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  param_groups:
+    - name: "encoder"               # DenseNet-121 backbone (self.encoder)
+      lr: 5.0e-5
+      weight_decay: 5.0e-5
+
+scheduler:
+  name: "linear_warmup_cosine"
+  warmup_epochs: 2
+  warmup_steps: null
+  min_lr_ratio: 0.1
+
+training:
+  epochs: 30
+  grad_clip_norm: 1.0
+  mixed_precision: true             # Transformer is AMP-stable
+  log_every_n_steps: 20
+
+validation:
+  every_n_epochs: 1
+  generate_samples_every_n_epochs: 5
+  num_sample_generations: 5
+  generation_max_length: 60
+  beam_size: 1                      # greedy; beam search not implemented yet
+
+early_stopping:
+  enabled: true
+  metric: "val_loss"                # switch to "val_bleu4" or "val_chexbert_f1_micro" once linguistic_metrics lands
+  mode: "min"
+  patience: 10
+  min_delta: 0.0
+
+checkpoint:
+  save_last: true
+  save_best: true
+
+wandb:
+  enabled: true
+  tags: ["clinical_transformer", "ablation_A", "loss_weighting_off", "decoding_bias_off"]

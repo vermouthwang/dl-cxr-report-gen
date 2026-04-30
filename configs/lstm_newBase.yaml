@@ -1,0 +1,67 @@
+# configs/lstm.yaml
+# Hierarchical LSTM (Jing et al., ACL 2018), wrapped via
+# src/models/hierarchical_lstm_adapter.py. See that file for the interface-translation
+# layer between our shared training loop and Yousuf's HierarchicalLSTM class.
+
+_base_: "base.yaml"
+
+experiment:
+  name: "lstm_hierarchical_IncreaseEpoch_reduceDropOut"
+
+data:
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: "hierarchical_lstm"
+  config:
+    embed_size: 512
+    hidden_size: 512
+    word_num_layers: 2
+    dropout: 0.0
+    s_max: 6
+    n_max: 30
+    pretrained_encoder: true
+
+optimizer:
+  name: "adamw"
+  lr: 1.0e-4
+  weight_decay: 5.0e-5
+  param_groups:
+    - name: "hlstm.encoder"
+      lr: 5.0e-5
+      weight_decay: 5.0e-5
+
+scheduler:
+  name: "linear_warmup_cosine"
+  warmup_epochs: 2
+  warmup_steps: null
+  min_lr_ratio: 0.1
+
+training:
+  epochs: 60
+  grad_clip_norm: 5.0
+  mixed_precision: false    # LSTMs are fp16-unstable; disable AMP
+  log_every_n_steps: 20
+
+validation:
+  every_n_epochs: 1
+  generate_samples_every_n_epochs: 5
+  num_sample_generations: 5
+  generation_max_length: 30
+  beam_size: 1
+
+early_stopping:
+  enabled: true
+  metric: "val_loss"
+  mode: "min"
+  patience: 10
+  min_delta: 0.0
+
+checkpoint:
+  save_last: true
+  save_best: true
+
+wandb:
+  enabled: true
+  tags: ["hierarchical_lstm", "Epoch60", "Dropout0.0"]
