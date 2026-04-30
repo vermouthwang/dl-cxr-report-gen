@@ -293,10 +293,3 @@ After successful setup:
 ```
 
 Total disk usage for CheXbert: **~1.4 GB**, all on scratch.
-
-## What's next
-
-After CheXbert is verified working, the next setup step is the reusable
-Python wrapper module (`src/evaluation/chexbert_labeler.py`) that loads
-the model once and exposes a clean API for the rest of the project to call.
-That's documented in the project README's Section 2, not here.
