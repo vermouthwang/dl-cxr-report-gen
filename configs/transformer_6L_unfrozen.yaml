@@ -1,0 +1,64 @@
+# configs/transformer.yaml
+# Vanilla Transformer captioner. DenseNet-121 (frozen) -> nn.TransformerDecoder
+# (visual tokens go directly to decoder cross-attention; no self-attn over
+# visuals). See src/models/transformer.py.
+
+_base_: "base.yaml"
+
+experiment:
+  name: "transformer_6L_unfrozen_03"
+
+data:
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: "transformer"
+  config:
+    embed_size: 512
+    n_heads: 8
+    n_layers: 6
+    d_ff: 2048
+    dropout: 0.1
+    pretrained_encoder: true
+    freeze_encoder: false
+
+optimizer:
+  name: "adamw"
+  lr: 1.0e-4
+  weight_decay: 0.01
+  # No param_groups: encoder is frozen, so only decoder/proj/embedding params train.
+
+scheduler:
+  name: "linear_warmup_cosine"
+  warmup_epochs: 2
+  warmup_steps: null
+  min_lr_ratio: 0.1
+
+training:
+  epochs: 30
+  grad_clip_norm: 1.0
+  mixed_precision: true
+  log_every_n_steps: 20
+
+validation:
+  every_n_epochs: 1
+  generate_samples_every_n_epochs: 1
+  num_sample_generations: 5
+  generation_max_length: 60
+  beam_size: 1
+
+early_stopping:
+  enabled: true
+  metric: "val_loss"
+  mode: "min"
+  patience: 10
+  min_delta: 0.0
+
+checkpoint:
+  save_last: true
+  save_best: true
+
+wandb:
+  enabled: true
+  tags: ["transformer", "6L", "unfrozen", "ablation"]

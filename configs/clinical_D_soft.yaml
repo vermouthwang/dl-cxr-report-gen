@@ -14,7 +14,7 @@
 _base_: "base.yaml"
 
 experiment:
-  name: "clinical_transformer_B"
+  name: "clinical_transformer_D_soft"
 
 data:
   batch_size: 16
@@ -42,11 +42,11 @@ model:
       lexicon_path: "data_meta/clinical_terms.json"
       vocab_path:   "data_meta/vocab.json"
       loss_weighting: true          # Approach 1: weighted CE during training
-      decoding_bias: false           # Approach 2: additive logit bias during generate()
-      alpha_finding: 3.0            # weight multiplier for CheXpert finding tokens
-      alpha_negation: 2.0           # weight multiplier for negation/reassurance tokens
+      decoding_bias: true           # Approach 2: additive logit bias during generate()
+      alpha_finding: 2.0            # weight multiplier for CheXpert finding tokens
+      alpha_negation: 1.5           # weight multiplier for negation/reassurance tokens
       alpha_hedge: 1.0              # weight multiplier for hedges (1.0 = OFF)
-      bias_strength: 1.0            # additive logit bias = strength * mask
+      bias_strength: 0.5            # additive logit bias = strength * mask
       bias_include_negations: true  # include negations in the inference bias mask
 
 optimizer:
@@ -91,4 +91,4 @@ checkpoint:
 
 wandb:
   enabled: true
-  tags: ["clinical_transformer", "ablation_B", "loss_weighting_on", "decoding_bias_off"]
+  tags: ["clinical_transformer", "ablation_D", "loss_weighting_on", "decoding_bias_on"]
