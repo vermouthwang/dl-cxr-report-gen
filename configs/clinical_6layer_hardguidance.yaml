@@ -1,16 +1,3 @@
-# configs/clinical_transformer.yaml
-# Production config for the clinical-term-guided Transformer (Yinghou).
-# This is "cell D" of the 2x2 ablation table — both clinical guidance flags ON.
-#
-# Ablation cells (override `model.config.clinical.*` in derived configs):
-#   A) loss_weighting=false, decoding_bias=false  -> equivalent to vanilla Transformer
-#   B) loss_weighting=true,  decoding_bias=false  -> training-time guidance only
-#   C) loss_weighting=false, decoding_bias=true   -> inference-time guidance only
-#   D) loss_weighting=true,  decoding_bias=true   -> full clinical guidance (this file)
-#
-# Encoder: DenseNet-121 ImageNet-pretrained, fine-tuned at a lower LR via
-# optimizer.param_groups (matches the Hierarchical LSTM convention).
-
 _base_: "base.yaml"
 
 experiment:
